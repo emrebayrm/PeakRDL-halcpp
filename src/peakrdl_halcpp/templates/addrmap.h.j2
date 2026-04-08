@@ -64,8 +64,8 @@ namespace {{ halnode.orig_type_name }}_nm
     {% endfor %}
 
     {# ======== 2. Generate the registers from the register files ======== #}
-    {% for rf in halnode.halchildren(children_type=HalRegfileNode, skip_buses=skip_buses) %}
-    {% for r in rf.halchildren(children_type=HalRegNode, skip_buses=skip_buses) %}
+    {% for rf in halnode.halchildren(children_type=HalRegfileNode, skip_buses=skip_buses, unique_orig_type=True) %}
+    {% for r in rf.halchildren(children_type=HalRegNode, skip_buses=skip_buses, unique_orig_type=True) %}
 
     {# ======== 2.a Generate the enumeration class ======== #}
     {% for f in r.halchildren(children_type=HalFieldNode, skip_buses=skip_buses) %}
