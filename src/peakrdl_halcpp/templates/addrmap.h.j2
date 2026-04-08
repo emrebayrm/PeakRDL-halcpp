@@ -37,7 +37,7 @@ namespace {{ halnode.orig_type_name }}_nm
     {
     public:
     {% for  s, v, d in enum_strings|zip(enum_values, enum_desc) %}
-        static const halcpp::Const<{{ const_width }}, {{ v }}> {{ s }}; // {{ d }}
+        static constexpr halcpp::Const<{{ const_width }}, {{ v }}> {{ s }}{}; // {{ d }}
     {% endfor %}
     };
     {% endif %}
@@ -77,7 +77,7 @@ namespace {{ halnode.orig_type_name }}_nm
     {
     public:
     {% for  s, v, d in enum_strings|zip(enum_values, enum_desc) %}
-        static const halcpp::Const<{{ const_width }}, {{ v }}> {{ s }}; // {{ d }}
+        static constexpr halcpp::Const<{{ const_width }}, {{ v }}> {{ s }}{}; // {{ d }}
     {% endfor %}
     };
     {% endif %}
