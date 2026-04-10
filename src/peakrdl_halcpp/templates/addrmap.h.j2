@@ -66,7 +66,9 @@ namespace {{ halnode.orig_type_name }}_nm
     {# ======== 2. Generate the registers from the register files ======== #}
     {% for rf in halnode.halchildren(children_type=HalRegfileNode, skip_buses=skip_buses, unique_orig_type=True) %}
     {% for r in rf.halchildren(children_type=HalRegNode, skip_buses=skip_buses, unique_orig_type=True) %}
+    {%- set seen_enum_names = [] %}
 
+    namespace {{ rf.orig_type_name }}_nm {
     {# ======== 2.a Generate the enumeration class ======== #}
     {% for f in r.halchildren(children_type=HalFieldNode, skip_buses=skip_buses) %}
     {% set has_enum, enum_name, enum_strings, enum_values, enum_desc, const_width = f.get_enums() %}
@@ -93,7 +95,7 @@ namespace {{ halnode.orig_type_name }}_nm
 
     {# Add the fields to the register #}
     {% for f in r.halchildren(children_type=HalFieldNode, skip_buses=skip_buses) %}
-        static halcpp::{{ f.cpp_access_type }}<{{ f.low }}, {{ f.high }}, TYPE> {{ f.inst_name }};
+        inline static halcpp::{{ f.cpp_access_type }}<{{ f.low }}, {{ f.high }}, TYPE> {{ f.inst_name }}{};
     {% endfor %}
     {# Inherit the overloaded '=' operator from the base class if register can be write from software #}
     {% if r.has_sw_writable %}
@@ -102,6 +104,7 @@ namespace {{ halnode.orig_type_name }}_nm
     {% endif %}
     };
     {% endfor %}
+    } // namespace {{ rf.orig_type_name }}_nm
     {% endfor %}
 
     {# ======== 3. Generate the register file classes ======== #}
@@ -116,9 +119,9 @@ namespace {{ halnode.orig_type_name }}_nm
     {% for c in rf.halchildren((HalRegNode, HalRegfileNode), skip_buses=skip_buses) %}
 
         {% if c.__class__.__name__ == "HalRegNode" and c.is_array %}
-        static halcpp::RegArrayNode<{{ halnode.orig_type_name }}_nm::{{ c.orig_type_name|upper }}, 0x{{ "%0x"|format(c.address_offset|int) }}, {{ c.width }}, {{ c.array_stride }}, TYPE , {{ c.array_dimensions|join(', ') }}> {{ c.inst_name }};
+        inline static halcpp::RegArrayNode<{{ halnode.orig_type_name }}_nm::{{ rf.orig_type_name }}_nm::{{ c.orig_type_name|upper }}, 0x{{ "%0x"|format(c.address_offset|int) }}, {{ c.width }}, {{ c.array_stride }}, TYPE , {{ c.array_dimensions|join(', ') }}> {{ c.inst_name }}{};
         {% elif c.__class__.__name__ == "HalRegNode" %}
-        static {{ c.orig_type_name|upper }}<0x{{ "%0x"|format(c.address_offset|int) }}, {{ c.width }}, TYPE> {{ c.inst_name }};
+        inline static {{ rf.orig_type_name }}_nm::{{ c.orig_type_name|upper }}<0x{{ "%0x"|format(c.address_offset|int) }}, {{ c.width }}, TYPE> {{ c.inst_name }}{};
         {% endif %}
     {% endfor %}
     };
@@ -145,17 +148,17 @@ public:
 
 {% for c in halnode.halchildren(skip_buses=skip_buses) %}
     {% if c.__class__.__name__ == "HalRegNode" and c.is_array %}
-    static halcpp::RegArrayNode<{{ halnode.orig_type_name }}_nm::{{ c.orig_type_name|upper }}, 0x{{ "%0x"|format(c.address_offset|int) }}, {{ c.width }}, {{ c.array_stride }}, TYPE , {{ c.array_dimensions|join(', ') }}> {{ c.inst_name }};
+    inline static halcpp::RegArrayNode<{{ halnode.orig_type_name }}_nm::{{ c.orig_type_name|upper }}, 0x{{ "%0x"|format(c.address_offset|int) }}, {{ c.width }}, {{ c.array_stride }}, TYPE , {{ c.array_dimensions|join(', ') }}> {{ c.inst_name }}{};
     {% elif c.__class__.__name__ == "HalRegNode" %}
-    static {{ halnode.orig_type_name }}_nm::{{ c.orig_type_name|upper }}<0x{{ "%0x"|format(c.address_offset|int) }}, {{ c.width }}, TYPE> {{ c.inst_name }};
+    inline static {{ halnode.orig_type_name }}_nm::{{ c.orig_type_name|upper }}<0x{{ "%0x"|format(c.address_offset|int) }}, {{ c.width }}, TYPE> {{ c.inst_name }}{};
     {% elif c.__class__.__name__ == "HalRegfileNode" and c.is_array %}
-    static halcpp::RegfileArrayNode<{{ halnode.orig_type_name }}_nm::{{ c.orig_type_name|upper }}, 0x{{ "%0x"|format(c.address_offset|int) }}, {{ c.array_stride }}, TYPE , {{ c.array_dimensions|join(', ') }}> {{ c.inst_name }};
+    inline static halcpp::RegfileArrayNode<{{ halnode.orig_type_name }}_nm::{{ c.orig_type_name|upper }}, 0x{{ "%0x"|format(c.address_offset|int) }}, {{ c.array_stride }}, TYPE , {{ c.array_dimensions|join(', ') }}> {{ c.inst_name }}{};
     {% elif c.__class__.__name__ == "HalRegfileNode" %}
-    static {{ halnode.orig_type_name }}_nm::{{ c.orig_type_name|upper }}<0x{{ "%0x"|format(c.address_offset|int) }}, TYPE> {{ c.inst_name }};
+    inline static {{ halnode.orig_type_name }}_nm::{{ c.orig_type_name|upper }}<0x{{ "%0x"|format(c.address_offset|int) }}, TYPE> {{ c.inst_name }}{};
     {% elif c.__class__.__name__ == "HalMemNode" %}
-    static {{ halnode.orig_type_name }}_nm::{{ c.orig_type_name|upper }}<0x{{ "%0x"|format(c.address_offset|int) }}, {{ c.size }}, TYPE> {{ c.inst_name }};
+    inline static {{ halnode.orig_type_name }}_nm::{{ c.orig_type_name|upper }}<0x{{ "%0x"|format(c.address_offset|int) }}, {{ c.size }}, TYPE> {{ c.inst_name }}{};
     {% else %}
-    static {{ halutils.get_extern(c)|upper }}<0x{{ "%0x"|format(c.address_offset|int) }}, TYPE> {{ c.inst_name }};
+    inline static {{ halutils.get_extern(c)|upper }}<0x{{ "%0x"|format(c.address_offset|int) }}, TYPE> {{ c.inst_name }}{};
     {% endif %}
 {% endfor %}
 };
