@@ -69,12 +69,12 @@ namespace {{ halnode.orig_type_name }}_nm
     {%- set seen_enum_names = [] %}
 
     namespace {{ rf.orig_type_name }}_nm {
+    {%- for r in rf.halchildren(children_type=HalRegNode, skip_buses=skip_buses, unique_orig_type=True) -%}
     {# ======== 2.a Generate the enumeration class ======== #}
-    {% for f in r.halchildren(children_type=HalFieldNode, skip_buses=skip_buses) %}
-    {% set has_enum, enum_name, enum_strings, enum_values, enum_desc, const_width = f.get_enums() %}
-    {% if has_enum and enum_name not in seen_enum_names %}
-    {# Add enum_name to seen_enum_names set #}
-    {% set _ = seen_enum_names.append(enum_name) %}
+    {%- for f in r.halchildren(children_type=HalFieldNode, skip_buses=skip_buses) -%}
+    {%- set has_enum, enum_name, enum_strings, enum_values, enum_desc, const_width = f.get_enums() -%}
+    {%- if has_enum and enum_name not in seen_enum_names -%}
+    {%- set _ = seen_enum_names.append(enum_name) -%}
     class {{ enum_name }}
     {
     public:
