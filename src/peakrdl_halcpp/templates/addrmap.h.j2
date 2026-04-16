@@ -166,17 +166,17 @@ public:
 
 {% for c in halnode.halchildren(skip_buses=skip_buses) %}
     {% if c.__class__.__name__ == "HalRegNode" and c.is_array %}
-    static halcpp::RegArrayNode<{{ halnode.orig_type_name }}_nm::{{ c.orig_type_name|capitalize }}, 0x{{ "%0x"|format(c.address_offset|int) }}, {{ c.width }}, {{ c.array_stride }}, TYPE , {{ c.array_dimensions|join(', ') }}> {{ c.inst_name | upper}};
+    static inline halcpp::RegArrayNode<{{ halnode.orig_type_name }}_nm::{{ c.orig_type_name|capitalize }}, 0x{{ "%0x"|format(c.address_offset|int) }}, {{ c.width }}, {{ c.array_stride }}, TYPE , {{ c.array_dimensions|join(', ') }}> {{ c.inst_name | upper}}{};
     {% elif c.__class__.__name__ == "HalRegNode" %}
-    static {{ halnode.orig_type_name }}_nm::{{ c.orig_type_name|capitalize }}<0x{{ "%0x"|format(c.address_offset|int) }}, {{ c.width }}, TYPE> {{ c.inst_name | upper}};
+    static inline {{ halnode.orig_type_name }}_nm::{{ c.orig_type_name|capitalize }}<0x{{ "%0x"|format(c.address_offset|int) }}, {{ c.width }}, TYPE> {{ c.inst_name | upper}}{};
     {% elif c.__class__.__name__ == "HalRegfileNode" and c.is_array %}
-    static halcpp::RegfileArrayNode<{{ halnode.orig_type_name }}_nm::{{ c.orig_type_name|capitalize }}, 0x{{ "%0x"|format(c.address_offset|int) }}, {{ c.array_stride }}, TYPE , {{ c.array_dimensions|join(', ') }}> {{ c.inst_name | upper}};
+    static inline halcpp::RegfileArrayNode<{{ halnode.orig_type_name }}_nm::{{ c.orig_type_name|capitalize }}, 0x{{ "%0x"|format(c.address_offset|int) }}, {{ c.array_stride }}, TYPE , {{ c.array_dimensions|join(', ') }}> {{ c.inst_name | upper}}{};
     {% elif c.__class__.__name__ == "HalRegfileNode" %}
-    static {{ halnode.orig_type_name }}_nm::{{ c.orig_type_name|capitalize }}<0x{{ "%0x"|format(c.address_offset|int) }}, TYPE> {{ c.inst_name | upper}};
+    static inline {{ halnode.orig_type_name }}_nm::{{ c.orig_type_name|capitalize }}<0x{{ "%0x"|format(c.address_offset|int) }}, TYPE> {{ c.inst_name | upper}}{};
     {% elif c.__class__.__name__ == "HalMemNode" %}
-    static {{ halnode.orig_type_name }}_nm::{{ c.orig_type_name|capitalize }}<0x{{ "%0x"|format(c.address_offset|int) }}, {{ c.size }}, TYPE> {{ c.inst_name | upper}};
+    static inline {{ halnode.orig_type_name }}_nm::{{ c.orig_type_name|capitalize }}<0x{{ "%0x"|format(c.address_offset|int) }}, {{ c.size }}, TYPE> {{ c.inst_name | upper}}{};
     {% else %}
-    static {{ halutils.get_extern(c)|upper }}<0x{{ "%0x"|format(c.address_offset|int) }}, TYPE> {{ c.inst_name | upper }};
+    static inline {{ halutils.get_extern(c)|upper }}<0x{{ "%0x"|format(c.address_offset|int) }}, TYPE> {{ c.inst_name | upper }}{};
     {% endif %}
 {% endfor %}
 };
