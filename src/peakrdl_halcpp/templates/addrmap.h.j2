@@ -79,7 +79,7 @@ namespace {{ halnode.orig_type_name }}_nm
     {% endfor %}
 
     {# ======== 2. Generate the registers from the register files ======== #}
-    {% for rf in halnode.halchildren(children_type=HalRegfileNode, skip_buses=skip_buses, unique_orig_type=True) %}
+    {% for rf in halnode.haldescendants(descendants_type=HalRegfileNode, in_post_order=True, skip_buses=skip_buses, unique_orig_type=True) %}
     namespace {{rf.orig_type_name}}_types {
     {% for r in rf.halchildren(children_type=HalRegNode, skip_buses=skip_buses, unique_orig_type=True) %}
 
@@ -124,7 +124,7 @@ namespace {{ halnode.orig_type_name }}_nm
     {% endfor %}
 
     {# ======== 3. Generate the register file classes ======== #}
-    {% for rf in halnode.haldescendants(descendants_type=HalRegfileNode, in_post_order=True, skip_buses=skip_buses) %}
+    {% for rf in halnode.haldescendants(descendants_type=HalRegfileNode, in_post_order=True, skip_buses=skip_buses, unique_orig_type=True) %}
     {{ rf.get_docstring() }}
     {{ rf.get_template_line() }}
     class {{ rf.orig_type_name|capitalize }} : public halcpp::{{ rf.cpp_access_type }}{{ rf.get_cls_tmpl_params()}}
@@ -138,6 +138,8 @@ namespace {{ halnode.orig_type_name }}_nm
         static halcpp::RegArrayNode<{{ halnode.orig_type_name }}_nm::{{ c.orig_type_name|capitalize }}, 0x{{ "%0x"|format(c.address_offset|int) }}, {{ c.width }}, {{ c.array_stride }}, TYPE , {{ c.array_dimensions|join(', ') }}> {{ c.inst_name| upper }};
         {%- elif c.__class__.__name__ == "HalRegNode" %}
         static inline {{rf.orig_type_name}}_types::{{ c.orig_type_name|capitalize }}<0x{{ "%0x"|format(c.address_offset|int) }}, {{ c.width }}, TYPE> {{ c.inst_name|upper }}{};
+        {% elif c.__class__.__name__ == "HalRegfileNode" %}
+        static inline {{ c.orig_type_name|capitalize }}<0x{{ "%0x"|format(c.address_offset|int) }}, TYPE> {{ c.inst_name|upper }}{};
         {% endif %}
     {% endfor %}
     };

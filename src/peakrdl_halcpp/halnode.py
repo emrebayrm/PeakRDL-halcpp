@@ -173,6 +173,9 @@ class HalBaseNode(Node):
                        ) -> Iterator['Node']:
         """HAL node descedant generator adapted from systemrdl Node.descendants class."""
 
+        if unique_orig_type and type_dict is None:
+            type_dict = {}
+
         for child in self.halchildren(descendants_type, unroll, skip_not_present, skip_buses, bus_offset, unique_orig_type, type_dict):
             if isinstance(child, descendants_type):
                 child_bus_offset = 0
