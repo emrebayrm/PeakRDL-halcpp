@@ -246,6 +246,27 @@ class HalFieldNode(HalBaseNode, FieldNode):
 
         return False, None, None, None, None, None
 
+    @property
+    def field_width(self) -> int:
+        """Returns the bit width of the field."""
+        return self.high - self.low + 1
+
+    @property
+    def cpp_field_type(self) -> str:
+        """Returns the smallest C++ unsigned integer type that fits the field width."""
+        w = self.field_width
+        if w <= 8:
+            return "uint8_t"
+        elif w <= 16:
+            return "uint16_t"
+        else:
+            return "uint32_t"
+
+    @property
+    def field_mask(self) -> int:
+        """Returns the bitmask for extracting this field from a raw register value."""
+        return (1 << self.field_width) - 1
+
 
 class HalRegNode(HalBaseNode, RegNode):
     """HalRegNode class inheriting from HalBaseNode class and systemrdl RegNode class.

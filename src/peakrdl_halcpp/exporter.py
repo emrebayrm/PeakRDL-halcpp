@@ -56,7 +56,8 @@ class HalExporter():
                outdir: str,
                list_files: bool = False,
                ext_modules: List = [str],
-               skip_buses: bool = False
+               skip_buses: bool = False,
+               generate_data: bool = False
                ):
         """Main function of the plugin extension.
 
@@ -72,6 +73,8 @@ class HalExporter():
             List of modules (i.e., SystemRDL addrmap objects) with extended functionalities.
         skip_buses: bool = False
             Keep AddrMapNodes containing only AddrMapNodes.
+        generate_data: bool = False
+            Also generate a companion _data.h header with bulk read/write snapshot structs.
         """
 
         # Check the node is an AddrmapNode object
@@ -117,7 +120,7 @@ class HalExporter():
 
             # The next lines generate the C++ header file for the
             # HalAddrmap node using a jinja2 template.
-            text = self.process_template(context)
+            text = self.process_template(context, template_name="addrmap.h.j2")
 
             # All addrmaps use the original type name (not instance name)
             # This ensures include statements match the actual filenames
@@ -132,7 +135,18 @@ class HalExporter():
                 with open(out_file, 'w') as f:
                     f.write(text)
 
-    def process_template(self, context: Dict) -> str:
+            if generate_data:
+                data_text = self.process_template(context, template_name="addrmap_data.h.j2")
+                data_out_file = os.path.join(
+                    outdir, halnode.orig_type_name.lower() + "_data.h")
+                if list_files:
+                    print('INFO: ' + data_out_file)
+                else:
+                    print('INFO: Generated file: ' + data_out_file)
+                    with open(data_out_file, 'w') as f:
+                        f.write(data_text)
+
+    def process_template(self, context: Dict, template_name: str) -> str:
         """Generates a C++ header file based on a jinja2 template.
 
         Parameters
@@ -159,5 +173,5 @@ class HalExporter():
         })
         # Render the C++ header text using the jinja2 template and the
         # specific context
-        cpp_header_text = env.get_template("addrmap.h.j2").render(context)
+        cpp_header_text = env.get_template(template_name).render(context)
         return cpp_header_text

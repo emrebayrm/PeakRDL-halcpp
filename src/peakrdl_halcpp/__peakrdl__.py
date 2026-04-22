@@ -42,6 +42,14 @@ class Exporter(ExporterSubcommandPlugin):
                 passing --skip-buses flag."
         )
 
+        arg_group.add_argument(
+            "--generate-data",
+            dest="generate_data",
+            default=False,
+            action="store_true",
+            help="Also generate a companion _data.h header with bulk read/write snapshot structs."
+        )
+
     def do_export(self, top_node: 'AddrmapNode', options: 'argparse.Namespace') -> None:
         """Plugin entry function."""
         hal = HalExporter()
@@ -51,4 +59,5 @@ class Exporter(ExporterSubcommandPlugin):
             list_files=options.list_files,
             ext_modules=options.ext,
             skip_buses=options.skip_buses,
+            generate_data=options.generate_data,
         )

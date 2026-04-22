@@ -1,0 +1,249 @@
+{{ halutils.generate_file_header() }}
+#pragma once
+
+#include <stdint.h>
+#include <string>
+#include <sstream>
+#include <iomanip>
+#include <concepts>
+#include "include/data_array.h"
+#include "include/io_ops.h"
+
+/**
+ * @note  C-style bitfields are used in this file to express field widths.
+ *        Their in-memory layout (bit ordering, padding between fields) is
+ *        implementation-defined and may vary across compilers and platforms.
+ *
+ *        DO NOT cast or memcpy these structs directly to/from raw register bytes.
+ *        Always use the generated read() and write() methods, which encode
+ *        bit positions explicitly via shifts and masks, independently of the
+ *        struct memory layout.
+ */
+{# ======================================================================
+   Macro: emit enum class declarations for all fields with RDL enum encoding.
+   seen_names deduplicates within a namespace scope.
+   ====================================================================== #}
+{% macro render_reg_enums(r, seen_names) %}
+{% for f in r.halchildren(children_type=HalFieldNode, skip_buses=skip_buses) %}
+{% set has_enum, enum_name, enum_strings, enum_values, enum_desc, const_width = f.get_enums() %}
+{% if has_enum and enum_name not in seen_names %}
+{% set _ = seen_names.append(enum_name) %}
+    enum class {{ enum_name }} : {{ f.cpp_field_type }} {
+    {% for s, v in enum_strings|zip(enum_values) %}
+        {{ s }} = {{ v }},
+    {% endfor %}
+    };
+{% endif %}
+{% endfor %}
+{% endmacro %}
+
+{# ======================================================================
+   Macro: generate a register struct templated on OFFSET.
+   Offset is baked into the type — read(io) / write(io) need no offset param.
+   read_all / write_all are non-static aliases for DataArray compatibility.
+   ====================================================================== #}
+{% macro render_reg_t(r) %}
+
+template<uint32_t OFFSET>
+struct {{ r.orig_type_name|capitalize }}_t {
+    {% for f in r.halchildren(children_type=HalFieldNode, skip_buses=skip_buses) %}
+    {% set has_enum, enum_name, _, _, _, _ = f.get_enums() %}
+    {% if has_enum %}
+    {{ enum_name }} {{ f.inst_name|upper }} : {{ f.field_width }};{% if not f.is_sw_readable %} // WO{% elif not f.is_sw_writable %} // RO {% else %} // RW {% endif %}
+
+    {% else %}
+    {{ f.cpp_field_type }} {{ f.inst_name|upper }} : {{ f.field_width }};{% if not f.is_sw_readable %} // WO{% elif not f.is_sw_writable %} // RO {% else %} // RW {% endif %}
+
+    {% endif %}
+    {% endfor %}
+    {% if r.has_sw_readable %}
+
+    template<IO_Ops T>
+    void read(const T& io_ops) {
+        uint32_t raw = io_ops.read32(OFFSET);
+        {% for f in r.halchildren(children_type=HalFieldNode, skip_buses=skip_buses) if f.is_sw_readable %}
+        {% set has_enum, enum_name, _, _, _, _ = f.get_enums() %}
+        {% if has_enum %}
+        {{ f.inst_name|upper }} = static_cast<{{ enum_name }}>((raw >> {{ f.low }}) & 0x{{ "%x"|format(f.field_mask) }});
+        {% else %}
+        {{ f.inst_name|upper }} = {{ f.cpp_field_type }}((raw >> {{ f.low }}) & 0x{{ "%x"|format(f.field_mask) }});
+        {% endif %}
+        {% endfor %}
+    }
+
+    template<IO_Ops T>
+    void read_all(const T& io_ops) { read(io_ops); }
+    {% endif %}
+    {% if r.has_sw_writable %}
+    template<IO_Ops T>
+    void write(T& io_ops) const {
+        io_ops.write32(OFFSET, 0
+        {%- for f in r.halchildren(children_type=HalFieldNode, skip_buses=skip_buses) if f.is_sw_writable +%}
+            | (static_cast<uint32_t>({{ f.inst_name|upper }}) << {{ f.low }})
+        {%- endfor %});
+    }
+
+    template<IO_Ops T>
+    void write_all(T& io_ops) const { write(io_ops); }
+    {% endif %}
+
+    std::string to_string(const std::string& indent = "") const {
+        std::ostringstream s;
+        {% for f in r.halchildren(children_type=HalFieldNode, skip_buses=skip_buses) %}
+        s << indent << "{{ f.inst_name|upper }}=0x" << std::hex << std::setfill('0')
+          << std::setw({{ (f.field_width + 3) // 4 }}) << static_cast<uint32_t>({{ f.inst_name|upper }}) << "\n";
+        {% endfor %}
+        return s.str();
+    }
+};
+{% endmacro %}
+
+{% if not halnode.is_bus %}
+namespace {{ halnode.orig_type_name }}_data_nm
+{
+    {# =========== 0. Generate constants =========== -#}
+    {% for name, value in parameters %}
+    {% if value is boolean %}
+    constexpr bool {{name}} = {{value}};
+    {% elif value is number %}
+    {# According to SystemRDL spec 6.2.1 all numbers are integral and unsigned.
+       and only supports `bits` and `longint unsigned`. 
+       However register size is 32bit, for that they will interpreted as uin32_t #}
+    constexpr uint32_t {{name}} = {{value}};
+    {% elif value is string %}
+    constexpr std::string_view {{name}} = "{{value}}";
+    {% endif %}
+    {% endfor %}
+
+    {# ====== Section 1: register structs for registers inside regfiles ====== #}
+    {% for rf in halnode.haldescendants(descendants_type=HalRegfileNode, skip_buses=skip_buses, unique_orig_type=True) %}
+    namespace {{ rf.orig_type_name }}_types {
+    {%- set seen_enum_names = [] -%}
+    {% for r in rf.halchildren(children_type=HalRegNode, skip_buses=skip_buses, unique_orig_type=True) -%}
+    {{ render_reg_enums(r, seen_enum_names) | indent | indent}}
+    {{ render_reg_t(r) | indent | indent }}
+    {%- endfor %}
+    } // namespace {{ rf.orig_type_name }}_types
+    {% endfor -%}
+    {# ====== Section 1b: register structs for direct addrmap registers ====== #}
+    {%- set seen_enum_names = [] -%}
+    {% for r in halnode.halchildren(children_type=HalRegNode, skip_buses=skip_buses, unique_orig_type=True) %}
+    {{ render_reg_enums(r, seen_enum_names) | indent }}
+    {{ render_reg_t(r) | indent}}
+    {% endfor -%}
+    {# ====== Section 2: regfile snapshot structs templated on BASE (post-order) ====== #}
+    {%- for rf in halnode.haldescendants(descendants_type=HalRegfileNode, in_post_order=True, skip_buses=skip_buses, unique_orig_type=True) %}
+    template<uint32_t BASE>
+    struct {{ rf.orig_type_name|capitalize }}_t {
+
+    {# -- Member declarations: each child has BASE+offset baked into its type -- #}
+    {% for c in rf.halchildren(children_type=(HalRegNode, HalRegfileNode), skip_buses=skip_buses) %}
+        {% if c.__class__.__name__ == "HalRegNode" and c.is_array %}
+        DataArray<{{ rf.orig_type_name }}_types::{{ c.orig_type_name|capitalize }}_t, BASE + 0x{{ "%x"|format(c.address_offset) }}, {{ c.array_stride }}, {{ c.array_dimensions|join(' * ') }}> {{ c.inst_name|upper }};
+        {% elif c.__class__.__name__ == "HalRegNode" %}
+        {{ rf.orig_type_name }}_types::{{ c.orig_type_name|capitalize }}_t<BASE + 0x{{ "%x"|format(c.address_offset) }}> {{ c.inst_name|upper }};
+        {% elif c.__class__.__name__ == "HalRegfileNode" and c.is_array %}
+        DataArray<{{ c.orig_type_name|capitalize }}_t, BASE + 0x{{ "%x"|format(c.address_offset) }}, {{ c.array_stride }}, {{ c.array_dimensions|join(' * ') }}> {{ c.inst_name|upper }};
+        {% elif c.__class__.__name__ == "HalRegfileNode" %}
+        {{ c.orig_type_name|capitalize }}_t<BASE + 0x{{ "%x"|format(c.address_offset) }}> {{ c.inst_name|upper }};
+        {% endif %}
+    {% endfor %}
+
+        template<IO_Ops T>
+        void read_all(const T& io_ops) {
+            {% for c in rf.halchildren(children_type=(HalRegNode, HalRegfileNode), skip_buses=skip_buses) %}
+            {% if c.__class__.__name__ == "HalRegNode" and c.is_array and c.has_sw_readable %}
+            {{ c.inst_name|upper }}.read_all(io_ops);
+            {% elif c.__class__.__name__ == "HalRegNode" and c.has_sw_readable %}
+            {{ c.inst_name|upper }}.read(io_ops);
+            {% elif c.__class__.__name__ == "HalRegfileNode" and c.is_array %}
+            {{ c.inst_name|upper }}.read_all(io_ops);
+            {% elif c.__class__.__name__ == "HalRegfileNode" %}
+            {{ c.inst_name|upper }}.read_all(io_ops);
+            {% endif %}
+            {% endfor %}
+        }
+
+        template<IO_Ops T>
+        void write_all(T& io_ops) const {
+            {% for c in rf.halchildren(children_type=(HalRegNode, HalRegfileNode), skip_buses=skip_buses) %}
+            {% if c.__class__.__name__ == "HalRegNode" and c.is_array and c.has_sw_writable %}
+            {{ c.inst_name|upper }}.write_all(io_ops);
+            {% elif c.__class__.__name__ == "HalRegNode" and c.has_sw_writable %}
+            {{ c.inst_name|upper }}.write(io_ops);
+            {% elif c.__class__.__name__ == "HalRegfileNode" and c.is_array %}
+            {{ c.inst_name|upper }}.write_all(io_ops);
+            {% elif c.__class__.__name__ == "HalRegfileNode" %}
+            {{ c.inst_name|upper }}.write_all(io_ops);
+            {% endif %}
+            {% endfor %}
+        }
+
+        std::string to_string(const std::string& indent = "") const {
+            std::string s;
+            {% for c in rf.halchildren(children_type=(HalRegNode, HalRegfileNode), skip_buses=skip_buses) %}
+            s += indent + "{{ c.inst_name|upper }}:\n";
+            s += {{ c.inst_name|upper }}.to_string(indent + "  ");
+            {% endfor %}
+            return s;
+        }
+    };
+    {% endfor %}
+
+} // namespace {{ halnode.orig_type_name }}_data_nm
+
+{# ====== Section 3: top-level DATA struct ====== #}
+struct {{ halnode.orig_type_name_hal|upper }}_DATA {
+
+{% for c in halnode.halchildren(children_type=(HalRegNode, HalRegfileNode), skip_buses=skip_buses) %}
+    {% if c.__class__.__name__ == "HalRegNode" and c.is_array %}
+    DataArray<{{ halnode.orig_type_name }}_data_nm::{{ c.orig_type_name|capitalize }}_t, 0x{{ "%x"|format(c.address_offset) }}, {{ c.array_stride }}, {{ c.array_dimensions|join(' * ') }}> {{ c.inst_name|upper }};
+    {% elif c.__class__.__name__ == "HalRegNode" %}
+    {{ halnode.orig_type_name }}_data_nm::{{ c.orig_type_name|capitalize }}_t<0x{{ "%x"|format(c.address_offset) }}> {{ c.inst_name|upper }};
+    {% elif c.__class__.__name__ == "HalRegfileNode" and c.is_array %}
+    DataArray<{{ halnode.orig_type_name }}_data_nm::{{ c.orig_type_name|capitalize }}_t, 0x{{ "%x"|format(c.address_offset) }}, {{ c.array_stride }}, {{ c.array_dimensions|join(' * ') }}> {{ c.inst_name|upper }};
+    {% elif c.__class__.__name__ == "HalRegfileNode" %}
+    {{ halnode.orig_type_name }}_data_nm::{{ c.orig_type_name|capitalize }}_t<0x{{ "%x"|format(c.address_offset) }}> {{ c.inst_name|upper }};
+    {% endif %}
+{% endfor %}
+
+    template<IO_Ops T>
+    void read_all(const T& io_ops) {
+        {% for c in halnode.halchildren(children_type=(HalRegNode, HalRegfileNode), skip_buses=skip_buses) %}
+        {% if c.__class__.__name__ == "HalRegNode" and c.is_array and c.has_sw_readable %}
+        {{ c.inst_name|upper }}.read_all(io_ops);
+        {% elif c.__class__.__name__ == "HalRegNode" and c.has_sw_readable %}
+        {{ c.inst_name|upper }}.read(io_ops);
+        {% elif c.__class__.__name__ == "HalRegfileNode" and c.is_array %}
+        {{ c.inst_name|upper }}.read_all(io_ops);
+        {% elif c.__class__.__name__ == "HalRegfileNode" %}
+        {{ c.inst_name|upper }}.read_all(io_ops);
+        {% endif %}
+        {% endfor %}
+    }
+
+    template<IO_Ops T>
+    void write_all(T& io_ops) const {
+        {% for c in halnode.halchildren(children_type=(HalRegNode, HalRegfileNode), skip_buses=skip_buses) %}
+        {% if c.__class__.__name__ == "HalRegNode" and c.is_array and c.has_sw_writable %}
+        {{ c.inst_name|upper }}.write_all(io_ops);
+        {% elif c.__class__.__name__ == "HalRegNode" and c.has_sw_writable %}
+        {{ c.inst_name|upper }}.write(io_ops);
+        {% elif c.__class__.__name__ == "HalRegfileNode" and c.is_array %}
+        {{ c.inst_name|upper }}.write_all(io_ops);
+        {% elif c.__class__.__name__ == "HalRegfileNode" %}
+        {{ c.inst_name|upper }}.write_all(io_ops);
+        {% endif %}
+        {% endfor %}
+    }
+
+    std::string to_string(const std::string& indent = "") const {
+        std::string s;
+        {% for c in halnode.halchildren(children_type=(HalRegNode, HalRegfileNode), skip_buses=skip_buses) %}
+        s += indent + "{{ c.inst_name|upper }}:\n";
+        s += {{ c.inst_name|upper }}.to_string(indent + "  ");
+        {% endfor %}
+        return s;
+    }
+};
+{% endif %}
